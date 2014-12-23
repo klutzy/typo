@@ -5,6 +5,7 @@ extern crate arena;
 extern crate getopts;
 extern crate syntax;
 extern crate rustc;
+extern crate rustc_resolve;
 extern crate rustc_typeck;
 extern crate rustc_trans;
 extern crate rustc_driver;
@@ -133,15 +134,15 @@ fn phase_3_run_analysis_passes<'tcx>(sess: Session,
 
     let lang_items = middle::lang_items::collect_language_items(krate, &sess);
 
-    let middle::resolve::CrateMap {
+    let rustc_resolve::CrateMap {
         def_map,
         freevars,
         capture_mode_map,
-        exp_map2: _,
+        export_map: _,
         trait_map,
         external_exports: _,
         last_private_map: _
-    } = middle::resolve::resolve_crate(&sess, &lang_items, krate);
+    } = rustc_resolve::resolve_crate(&sess, &lang_items, krate);
 
     // Discard MTWT tables that aren't required past resolution.
     syntax::ext::mtwt::clear_tables();
