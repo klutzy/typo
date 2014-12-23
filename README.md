@@ -10,7 +10,7 @@ Options:
     --cfg SPEC
     -L PATH
     --sysroot PATH
-    --tag PATH
+    --tags PATH
     --node-id-map PATH
     --type-map PATH
 ```
@@ -20,7 +20,7 @@ Options:
 
 # Tags
 
-Tags file is generated if `--tag PATH` is passed.
+Tags file is generated if `--tags PATH` is passed.
 
 Unlike Rust's default ctags.rust, typo parses Rust source code thus it can
 generate better table.
