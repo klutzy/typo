@@ -79,7 +79,9 @@ impl<'a> Visitor<'a> for MacroTagGrepper {
                         // currently Rust assumes `p` has only one segment.
                         if p.segments.len() == 1 {
                             let p0 = &p.segments[0];
-                            self.macro_map.push((p0.identifier, p.span));
+                            if p0.identifier.as_str() == "macro_rules" {
+                                self.macro_map.push((i.ident, p.span));
+                            }
                         }
                     }
                 }
