@@ -39,6 +39,8 @@ fn main() {
 
         // typo
         getopts::optmulti("", "tags", "output path of ctags", "PATH"),
+        getopts::optflag("", "tags-append", "append to existing tags"),
+
         getopts::optmulti("", "node-id-map", "output path of NodeId map", "PATH"),
         getopts::optmulti("", "type-map", "output path of NodeId-to-Type map", "PATH"),
     ];
@@ -74,13 +76,13 @@ fn main() {
                 (Input::File(Path::new(ifile)), Some(Path::new(ifile)))
             }
         }
-        // TODO
-        _ => early_error("multiple crates not supported yet")
+        _ => early_error("multiple input found")
     };
 
     let tag_path = matches.opt_str("tags").and_then(|s| Some(Path::new(s)));
     let node_id_map_path = matches.opt_str("node-id-map").and_then(|s| Some(Path::new(s)));
     let type_map_path = matches.opt_str("type-map").and_then(|s| Some(Path::new(s)));
+    let tags_append = matches.opt_present("tags-append");
 
     let descriptions = syntax::diagnostics::registry::Registry::new(&[]);
     let sess = rustc::session::build_session(sopts, input_file_path, descriptions);
@@ -89,8 +91,13 @@ fn main() {
 
     let tag_file = tag_path.and_then(|path| {
         // TODO: do not erase original tags if made by other program
-        let mut f = io::File::create(&path);
-        tags::write_header(&mut f).unwrap();
+        let mut f = if tags_append {
+            io::File::open_mode(&path, io::Append, io::Write).unwrap()
+        } else {
+            let mut f = io::File::create(&path).unwrap();
+            tags::write_header(&mut f).unwrap();
+            f
+        };
         tags::write_macros(&mut f, sess.codemap(), &krate).unwrap();
         Some(f)
     });
@@ -114,12 +121,12 @@ fn main() {
     let krate = ty_cx.map.krate();
 
     if let Some(path) = node_id_map_path {
-        let mut f = io::File::create(&path);
+        let mut f = io::File::create(&path).unwrap();
         node_id_map::write_node_id_dic(&mut f, ty_cx.sess.codemap(), krate).unwrap();
     }
 
     if let Some(path) = type_map_path {
-        let mut f = io::File::create(&path);
+        let mut f = io::File::create(&path).unwrap();
         type_map::write_type_map(&mut f, &ty_cx).unwrap();
     }
 }

@@ -1,4 +1,4 @@
-typo is a small utility which generates useful tables for Rust programmer.
+typo is a small utility which generates tags and type tables.
 It is intended to be used via [typo.vim](https://github.com/klutzy/typo.vim).
 
 # Usage
@@ -11,6 +11,7 @@ Options:
     -L PATH
     --sysroot PATH
     --tags PATH
+    --tags-append
     --node-id-map PATH
     --type-map PATH
 ```
@@ -31,7 +32,7 @@ Major sales points include:
 -   Recognizes struct fields and enum variants.
 -   Recognizes macro-generated items.
 
-Unfortunately, typo doesn't recognize multiple crates yet.
+typo overwrites tags as default. `--tags-append` overrides the behavior.
 
 # NodeId Map
 
