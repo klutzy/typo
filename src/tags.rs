@@ -30,8 +30,23 @@ fn write_line<W: Writer>(writer: &mut W,
 
     // TODO: what if line is None?
     if let Some(line) = line {
-        let line = format!("{}\t{}\t/^{}$/", id.as_str(), filename, line);
-        try!(writer.write_line(&*line));
+        // <id> '\t' <filename> '\t' '/^' <line> '$/'
+
+        try!(writer.write_str(id.as_str()));
+        try!(writer.write_u8(b'\t'));
+        try!(writer.write_str(filename));
+        try!(writer.write_u8(b'\t'));
+
+        try!(writer.write(b"/^"));
+        for c in line.chars() {
+            if c == '/' || c == '$' || c == '\\' {
+                try!(writer.write_u8(b'\\'));
+            }
+            try!(writer.write_char(c));
+        }
+        try!(writer.write(b"$/"));
+
+        try!(writer.write_u8(b'\n'));
     }
 
     Ok(())
