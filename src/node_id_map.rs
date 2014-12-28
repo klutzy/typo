@@ -48,7 +48,13 @@ impl<'a> Visitor<'a> for NodeIdGrepper {
     }
 
     fn visit_expr(&mut self, ex: &'a ast::Expr) {
-        self.grep_id(ex.id, ex.span);
+        match ex.node {
+            // Will be visited by visit_path
+            ast::ExprPath(..) => (),
+            _ => {
+                self.grep_id(ex.id, ex.span);
+            }
+        }
         visit::walk_expr(self, ex);
     }
 
