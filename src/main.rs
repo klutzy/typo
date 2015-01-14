@@ -1,5 +1,6 @@
 #![crate_type = "bin"]
 #![feature(slicing_syntax)]
+#![allow(unstable)]
 
 extern crate arena;
 extern crate getopts;
@@ -10,17 +11,15 @@ extern crate rustc_typeck;
 extern crate rustc_trans;
 extern crate rustc_driver;
 
-use std::cell::RefCell;
 use std::io;
-use arena::TypedArena;
 use syntax::ast_map;
-use rustc::session::config::{mod, Input};
+use rustc::session::config::{self, Input};
 use rustc::session::early_error;
 use rustc::session::Session;
 use rustc::metadata::creader;
 use rustc::middle;
 use rustc::middle::stability;
-use rustc::middle::ty::{mod, ctxt};
+use rustc::middle::ty::{self, ctxt, CtxtArenas};
 use rustc_trans::back::link;
 use rustc_driver::driver;
 
@@ -45,7 +44,7 @@ fn main() {
         getopts::optmulti("", "type-map", "output path of NodeId-to-Type map", "PATH"),
     ];
 
-    let matches = match getopts::getopts(args[1..], &*optgroups) {
+    let matches = match getopts::getopts(&args[1..], &*optgroups) {
         Ok(m) => m,
         Err(f) => early_error(&*f.to_string()),
     };
@@ -53,20 +52,19 @@ fn main() {
     let sopts = {
         let mut sopts = config::basic_options();
         sopts.cfg = config::parse_cfgspecs(matches.opt_strs("cfg"));
-        let addl_lib_search_paths = matches.opt_strs("L").iter().map(|s| {
-            Path::new(s.as_slice())
-        }).collect();
-        sopts.addl_lib_search_paths = RefCell::new(addl_lib_search_paths);
+        for s in matches.opt_strs("L").iter() {
+            sopts.search_paths.add_path(&**s);
+        }
         sopts.maybe_sysroot = matches.opt_str("sysroot").map(|m| Path::new(m));
         sopts
     };
 
     let (input, input_file_path) = match matches.free.len() {
-        0u => {
+        0us => {
             println!("{}", getopts::usage("typo [OPTIONS] [INPUT]", &*optgroups));
             early_error("no input filename given");
         }
-        1u => {
+        1us => {
             let ifile = matches.free[0].as_slice();
             if ifile == "-" {
                 let contents = io::stdin().read_to_end().unwrap();
@@ -116,8 +114,8 @@ fn main() {
 
     let mut forest = ast_map::Forest::new(expanded_crate);
     let ast_map = driver::assign_node_ids_and_map(&sess, &mut forest);
-    let type_arena = TypedArena::new();
-    let ty_cx = phase_3_run_analysis_passes(sess, ast_map, &type_arena, id);
+    let arena = CtxtArenas::new();
+    let ty_cx = phase_3_run_analysis_passes(sess, ast_map, &arena, id);
     let krate = ty_cx.map.krate();
 
     if let Some(path) = node_id_map_path {
@@ -133,11 +131,11 @@ fn main() {
 
 fn phase_3_run_analysis_passes<'tcx>(sess: Session,
                                      ast_map: ast_map::Map<'tcx>,
-                                     type_arena: &'tcx TypedArena<ty::TyS<'tcx>>,
+                                     arena: &'tcx CtxtArenas<'tcx>,
                                      _name: String) -> ty::ctxt<'tcx> {
     let krate = ast_map.krate();
 
-     creader::read_crates(&sess, krate);
+     creader::CrateReader::new(&sess).read_crates(krate);
 
     let lang_items = middle::lang_items::collect_language_items(krate, &sess);
 
@@ -148,8 +146,13 @@ fn phase_3_run_analysis_passes<'tcx>(sess: Session,
         export_map: _,
         trait_map,
         external_exports: _,
-        last_private_map: _
-    } = rustc_resolve::resolve_crate(&sess, &lang_items, krate);
+        last_private_map: _,
+        glob_map: _,
+    } = rustc_resolve::resolve_crate(&sess,
+                                     &ast_map,
+                                     &lang_items,
+                                     krate,
+                                     rustc_resolve::MakeGlobMap::No);
 
     // Discard MTWT tables that aren't required past resolution.
     syntax::ext::mtwt::clear_tables();
@@ -163,7 +166,7 @@ fn phase_3_run_analysis_passes<'tcx>(sess: Session,
     let stability_index = stability::Index::build(krate);
 
     let ty_cx = ty::mk_ctxt(sess,
-                            type_arena,
+                            arena,
                             def_map,
                             named_region_map,
                             ast_map,

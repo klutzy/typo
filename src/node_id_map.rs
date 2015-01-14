@@ -1,7 +1,7 @@
 use std::io::IoResult;
 use syntax::ast;
 use syntax::codemap::{Span, CodeMap};
-use syntax::visit::{mod, Visitor};
+use syntax::visit::{self, Visitor};
 
 pub fn write_node_id_dic<W: Writer>(w: &mut W,
                                     cm: &CodeMap,

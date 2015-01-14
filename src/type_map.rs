@@ -1,5 +1,5 @@
 use std::io::IoResult;
-use rustc::middle::ty::{mod, ctxt};
+use rustc::middle::ty::{self, ctxt};
 use rustc::util::ppaux;
 
 pub fn write_type_map<W: Writer>(w: &mut W,
