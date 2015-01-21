@@ -1,7 +1,96 @@
-use std::io::{Writer, IoResult};
+#![crate_type = "bin"]
+
+#![feature(slicing_syntax)]
+#![allow(unstable)]
+
+extern crate getopts;
+extern crate syntax;
+extern crate rustc;
+extern crate rustc_trans;
+extern crate rustc_driver;
+
+use std::io::{self, Writer, IoResult};
 use syntax::ast;
 use syntax::codemap::{Span, CodeMap};
 use syntax::visit::{self, Visitor};
+use rustc::session::config::{self, Input};
+use rustc::session::early_error;
+use rustc_trans::back::link;
+use rustc_driver::driver;
+
+fn main() {
+    let args = std::os::args();
+
+    let optgroups = &[
+        // rustc
+        getopts::optmulti("", "cfg", "Configure the compilation environment", "SPEC"),
+        getopts::optmulti("L", "",   "Add a directory to the library search path", "PATH"),
+        getopts::optopt("", "sysroot", "Override the system root", "PATH"),
+
+        // typo
+        getopts::optmulti("", "tags", "output path of ctags", "PATH"),
+        getopts::optflag("", "tags-append", "append to existing tags"),
+    ];
+
+    let matches = match getopts::getopts(&args[1..], &*optgroups) {
+        Ok(m) => m,
+        Err(f) => early_error(&*f.to_string()),
+    };
+
+    let sopts = {
+        let mut sopts = config::basic_options();
+        sopts.cfg = config::parse_cfgspecs(matches.opt_strs("cfg"));
+        for s in matches.opt_strs("L").iter() {
+            sopts.search_paths.add_path(&**s);
+        }
+        sopts.maybe_sysroot = matches.opt_str("sysroot").map(|m| Path::new(m));
+        sopts
+    };
+
+    let (input, input_file_path) = match matches.free.len() {
+        0us => {
+            println!("{}", getopts::usage("typo-tags [OPTIONS] [INPUT]", &*optgroups));
+            early_error("no input filename given");
+        }
+        1us => {
+            let ifile = matches.free[0].as_slice();
+            if ifile == "-" {
+                let contents = io::stdin().read_to_end().unwrap();
+                let src = String::from_utf8(contents).unwrap();
+                (Input::Str(src), None)
+            } else {
+                (Input::File(Path::new(ifile)), Some(Path::new(ifile)))
+            }
+        }
+        _ => early_error("multiple input found")
+    };
+
+    let tag_path = matches.opt_str("tags").unwrap_or("tags".to_string());
+    let tag_path = Path::new(tag_path);
+    let tags_append = matches.opt_present("tags-append");
+
+    let descriptions = syntax::diagnostics::registry::Registry::new(&[]);
+    let sess = rustc::session::build_session(sopts, input_file_path, descriptions);
+    let cfg = config::build_configuration(&sess);
+    let krate = driver::phase_1_parse_input(&sess, cfg, &input);
+
+    // TODO: do not erase original tags if made by other program
+    let mut f = if tags_append {
+        io::File::open_mode(&tag_path, io::Append, io::Write).unwrap()
+    } else {
+        let mut f = io::File::create(&tag_path).unwrap();
+        write_header(&mut f).unwrap();
+        f
+    };
+
+    write_macros(&mut f, sess.codemap(), &krate).unwrap();
+
+    let id = link::find_crate_name(Some(&sess), krate.attrs.as_slice(), &input);
+    let expanded_crate = driver::phase_2_configure_and_expand(&sess, krate, &*id, None);
+    let expanded_crate = expanded_crate.expect("phase 2 failed");
+
+    write_defs(&mut f, sess.codemap(), &expanded_crate).unwrap();
+}
 
 pub fn write_header<W: Writer>(writer: &mut W) -> IoResult<()> {
     let info = [
