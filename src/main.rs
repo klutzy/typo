@@ -25,7 +25,6 @@ use rustc_driver::driver;
 
 mod node_id_map;
 mod type_map;
-mod tags;
 
 fn main() {
     let args = std::os::args();
@@ -35,10 +34,6 @@ fn main() {
         getopts::optmulti("", "cfg", "Configure the compilation environment", "SPEC"),
         getopts::optmulti("L", "",   "Add a directory to the library search path", "PATH"),
         getopts::optopt("", "sysroot", "Override the system root", "PATH"),
-
-        // typo
-        getopts::optmulti("", "tags", "output path of ctags", "PATH"),
-        getopts::optflag("", "tags-append", "append to existing tags"),
 
         getopts::optmulti("", "node-id-map", "output path of NodeId map", "PATH"),
         getopts::optmulti("", "type-map", "output path of NodeId-to-Type map", "PATH"),
@@ -77,40 +72,17 @@ fn main() {
         _ => early_error("multiple input found")
     };
 
-    let tag_path = matches.opt_str("tags").and_then(|s| Some(Path::new(s)));
     let node_id_map_path = matches.opt_str("node-id-map").and_then(|s| Some(Path::new(s)));
     let type_map_path = matches.opt_str("type-map").and_then(|s| Some(Path::new(s)));
-    let tags_append = matches.opt_present("tags-append");
 
     let descriptions = syntax::diagnostics::registry::Registry::new(&[]);
     let sess = rustc::session::build_session(sopts, input_file_path, descriptions);
     let cfg = config::build_configuration(&sess);
     let krate = driver::phase_1_parse_input(&sess, cfg, &input);
 
-    let tag_file = tag_path.and_then(|path| {
-        // TODO: do not erase original tags if made by other program
-        let mut f = if tags_append {
-            io::File::open_mode(&path, io::Append, io::Write).unwrap()
-        } else {
-            let mut f = io::File::create(&path).unwrap();
-            tags::write_header(&mut f).unwrap();
-            f
-        };
-        tags::write_macros(&mut f, sess.codemap(), &krate).unwrap();
-        Some(f)
-    });
-
     let id = link::find_crate_name(Some(&sess), krate.attrs.as_slice(), &input);
     let expanded_crate = driver::phase_2_configure_and_expand(&sess, krate, &*id, None);
     let expanded_crate = expanded_crate.expect("phase 2 failed");
-
-    if let Some(mut f) = tag_file {
-        tags::write_defs(&mut f, sess.codemap(), &expanded_crate).unwrap();
-    }
-
-    if type_map_path.is_none() {
-        return;
-    }
 
     let mut forest = ast_map::Forest::new(expanded_crate);
     let ast_map = driver::assign_node_ids_and_map(&sess, &mut forest);

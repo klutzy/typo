@@ -3,3 +3,13 @@
 name = "typo"
 version = "0.0.1"
 authors = ["klutzy <klutzytheklutzy@gmail.com>"]
+
+[[bin]]
+
+name = "typo"
+path = "src/main.rs"
+
+[[bin]]
+
+name = "typo-tags"
+path = "src/tags.rs"
